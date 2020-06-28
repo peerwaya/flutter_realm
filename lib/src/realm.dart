@@ -2,6 +2,28 @@ part of flutter_realm;
 
 final _uuid = Uuid();
 
+Map<String, dynamic> _asStringKeyedMap(Map<dynamic, dynamic> map) {
+  if (map == null) return null;
+  if (map is Map<String, dynamic>) {
+    return map;
+  } else {
+    return Map<String, dynamic>.from(map);
+  }
+}
+
+class QueryResult {
+  final int count;
+  final List result;
+  QueryResult({this.count, this.result});
+
+  factory QueryResult.fromMap(Map<String, dynamic> map) {
+    return QueryResult(
+      count: map['count'],
+      result: map['results'],
+    );
+  }
+}
+
 class Realm {
   final _channel = MethodChannelTransport(_uuid.v4());
   final _unsubscribing = Set<String>();
@@ -56,8 +78,8 @@ class Realm {
         }
         // ignore: close_sinks
         final controller = _subscriptions[subscriptionId];
-        final List results = call.arguments['results'];
-        controller.value = results.cast<Map>();
+        controller.value =
+            QueryResult.fromMap(_asStringKeyedMap(call.arguments));
         break;
       default:
         throw ('Unknown method: $call');
@@ -80,16 +102,16 @@ class Realm {
   Future<T> _invokeMethod<T>(String method, [dynamic arguments]) =>
       _channel.invokeMethod(method, arguments);
 
-  final Map<String, BehaviorSubject<List<Map>>> _subscriptions = {};
+  final Map<String, BehaviorSubject<QueryResult>> _subscriptions = {};
 
   Future<List> allObjects(String className) =>
       _invokeMethod('allObjects', {'\$': className});
 
-  Stream<List<Map>> subscribeAllObjects(String className) {
+  Stream<QueryResult> subscribeAllObjects(String className) {
     final subscriptionId =
         'subscribeAllObjects:' + className + ':' + _uuid.v4();
 
-    final controller = BehaviorSubject<List<Map>>(onCancel: () {
+    final controller = BehaviorSubject<QueryResult>(onCancel: () {
       _unsubscribe(subscriptionId);
     });
 
@@ -102,12 +124,12 @@ class Realm {
     return controller;
   }
 
-  Stream<List> subscribeObjects(Query query) {
+  Stream<QueryResult> subscribeObjects(Query query, {int limit = -1}) {
     final subscriptionId =
         'subscribeObjects:' + query.className + ':' + _uuid.v4();
 
     // ignore: close_sinks
-    final controller = BehaviorSubject<List<Map>>(onCancel: () {
+    final controller = BehaviorSubject<QueryResult>(onCancel: () {
       _unsubscribe(subscriptionId);
     });
 
@@ -116,17 +138,33 @@ class Realm {
       '\$': query.className,
       'predicate': query._container,
       'subscriptionId': subscriptionId,
+      'limit': limit
     });
 
     return controller.stream;
   }
 
-  Future<List> objects(Query query) => _invokeMethod(
-      'objects', {'\$': query.className, 'predicate': query._container});
+  Future<QueryResult> objects(Query query, {int limit = -1}) async {
+    final map = await _invokeMethod('objects',
+        {'\$': query.className, 'predicate': query._container, 'limit': limit});
+    return QueryResult.fromMap(_asStringKeyedMap(map));
+  }
 
-  Future<Map> createObject(String className, Map<String, dynamic> object) =>
-      _invokeMethod(
-          'createObject', <String, dynamic>{'\$': className}..addAll(object));
+  Future<Map<String, dynamic>> createObject(
+      String className, Map<String, dynamic> object) async {
+    final map = await _invokeMethod(
+        'createObject', <String, dynamic>{'\$': className}..addAll(object));
+    return _asStringKeyedMap(map);
+  }
+
+  Future<Map<String, dynamic>> object(String className,
+      {@required dynamic primaryKey}) async {
+    final map = await _invokeMethod('object', {
+      '\$': className,
+      'primaryKey': primaryKey,
+    });
+    return _asStringKeyedMap(map);
+  }
 
   Future _unsubscribe(String subscriptionId) async {
     if (!_subscriptions.containsKey(subscriptionId)) {
@@ -140,14 +178,16 @@ class Realm {
     _unsubscribing.remove(subscriptionId);
   }
 
-  Future<Map> update(String className,
-      {@required dynamic primaryKey, @required Map<String, dynamic> value}) {
+  Future<Map<String, dynamic>> update(String className,
+      {@required dynamic primaryKey,
+      @required Map<String, dynamic> value}) async {
     assert(value['uuid'] == null);
-    return _invokeMethod('updateObject', {
+    final map = await _invokeMethod('updateObject', {
       '\$': className,
       'primaryKey': primaryKey,
       'value': value,
     });
+    return _asStringKeyedMap(map);
   }
 
   Future delete(String className, {@required dynamic primaryKey}) {
@@ -155,6 +195,43 @@ class Realm {
       '\$': className,
       'primaryKey': primaryKey,
     });
+  }
+
+  Future<int> deleteRecording(
+      {@required dynamic primaryKey, String scheduleId}) {
+    return _invokeMethod('deleteRecording',
+        {'primaryKey': primaryKey, 'scheduleId': scheduleId});
+  }
+
+  Future<int> deleteAllRecordings(
+      {@required List<String> primaryKeys, String scheduleId}) {
+    return _invokeMethod('deleteAllRecordings',
+        {'primaryKeys': primaryKeys, 'scheduleId': scheduleId});
+  }
+
+  Future<QueryResult> getRecordingIdsForScheduleIds(
+      List<String> scheduleIds) async {
+    final map = await _invokeMethod(
+        'getRecordingIdsForScheduleIds', {'scheduleIds': scheduleIds});
+    return QueryResult.fromMap(_asStringKeyedMap(map));
+  }
+
+  Future<QueryResult> getRecordingIdsForSchedule(String scheduleId) async {
+    final map = await _invokeMethod(
+        'getRecordingIdsForSchedule', {'scheduleId': scheduleId});
+    return QueryResult.fromMap(_asStringKeyedMap(map));
+  }
+
+  Future<QueryResult> getScheduleIdsWithRecordings(
+      List<String> scheduleIds) async {
+    final map = await _invokeMethod(
+        'getScheduleIdsWithRecordings', {'scheduleIds': scheduleIds});
+    return QueryResult.fromMap(_asStringKeyedMap(map));
+  }
+
+  Future<QueryResult> getAllScheduleIds({int limit = -1}) async {
+    final map = await _invokeMethod('getAllScheduleIds', {'limit': limit});
+    return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 
   Future<String> filePath() => _invokeMethod('filePath');
@@ -193,6 +270,8 @@ class Query {
   Query contains(String field, String value) =>
       _pushThree('contains', field, value);
 
+  Query isIn(String field, List value) => _pushThree('in', field, value);
+
   Query notEqualTo(String field, dynamic value) =>
       _pushThree('notEqualTo', field, value);
 
@@ -218,10 +297,14 @@ class Query {
 
 class Configuration {
   final String inMemoryIdentifier;
+  final Uint8List encryptionKey;
 
-  const Configuration({this.inMemoryIdentifier});
+  const Configuration({this.inMemoryIdentifier, this.encryptionKey});
 
-  Map<String, String> toMap() => {'inMemoryIdentifier': inMemoryIdentifier};
+  Map<String, dynamic> toMap() => {
+        'inMemoryIdentifier': inMemoryIdentifier,
+        'encryptionKey': encryptionKey
+      };
 
   static const Configuration defaultConfiguration = const Configuration();
 }

@@ -1,5 +1,9 @@
 package com.it_nomads.flutter_realm;
 
+import android.os.Handler;
+import android.os.Looper;
+
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -24,7 +28,7 @@ class FlutterRealm {
     private DynamicRealm realm;
     private HashMap<String, RealmResults> subscriptions = new HashMap<>();
     private final MethodChannel channel;
-
+    private Handler handler = new Handler(Looper.getMainLooper());
     FlutterRealm(MethodChannel channel, String realmId, Map arguments) {
         this.channel = channel;
         this.realmId = realmId;
@@ -32,7 +36,10 @@ class FlutterRealm {
         RealmConfiguration.Builder builder = new RealmConfiguration.Builder().modules(Realm.getDefaultModule());
 
         String inMemoryIdentifier = (String) arguments.get("inMemoryIdentifier");
-
+        byte[] encryptionKey = (byte[]) arguments.get("encryptionKey");
+        if (encryptionKey != null) {
+            builder.encryptionKey(encryptionKey);
+        }
         if (inMemoryIdentifier == null) {
         } else {
             builder.inMemory().name(inMemoryIdentifier);
@@ -58,7 +65,7 @@ class FlutterRealm {
 
     }
 
-    void onMethodCall(MethodCall call, MethodChannel.Result result) {
+    void onMethodCall(MethodCall call, final MethodChannel.Result result) {
 
         try {
             Map arguments = (Map) call.arguments;
@@ -92,11 +99,121 @@ class FlutterRealm {
                     result.success(null);
                     break;
                 }
+                case "deleteRecording": {
+                    String scheduleId = (String) arguments.get("scheduleId");
+                    Object primaryKey = arguments.get("primaryKey");
+                    realm.executeTransaction(new DynamicRealm.Transaction() {
+                        @Override
+                        public void execute(DynamicRealm realm) {
+                            DynamicRealmObject object = find("Recording", primaryKey);
+                            if (object == null) {
+                                return;
+                            }
+                            String path = object.get("path");
+                            object.deleteFromRealm();
+                            File file = new File(path);
+                            file.delete();
+                            handler.post(() -> {
+                                result.success(realm.where("Recording").equalTo("scheduleId", scheduleId).count());
+                            });
+                        }
+
+                    });
+                    break;
+                }
+                case "deleteAllRecordings": {
+                    String scheduleId = (String) arguments.get("scheduleId");
+                    final List<String> primaryKeys = (List<String>)arguments.get("primaryKeys");
+
+                    realm.executeTransaction(new DynamicRealm.Transaction() {
+                        @Override
+                        public void execute(DynamicRealm realm) {
+                            RealmResults<DynamicRealmObject> objects = realm.where("Recording").in("uuid", primaryKeys.toArray(new String[0])).findAll();
+                            ArrayList<String> filesToDelete = new ArrayList<>();
+                            for (DynamicRealmObject object : objects) {
+                                filesToDelete.add(object.get("path"));
+                            }
+                            objects.deleteAllFromRealm();
+                            for (String path : filesToDelete) {
+                               File file = new File(path);
+                               file.delete();
+                            }
+                            handler.post(() -> {
+                                result.success(realm.where("Recording").equalTo("scheduleId", scheduleId).count());
+                            });
+                        }
+
+                    });
+                    break;
+                }
+                case "getRecordingIdsForScheduleIds": {
+                    List<String> scheduleIds = (List<String>)arguments.get("scheduleIds");
+                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0])).findAll();
+                    ArrayList list = new ArrayList<>();
+                    for (DynamicRealmObject object : objects) {
+                        HashMap map = new HashMap();
+                        map.put("uuid", object.get("uuid"));
+                        map.put("scheduleId", object.get("scheduleId"));
+                        list.add(map);
+                    }
+                    HashMap map = new HashMap();
+                    map.put("results", Collections.unmodifiableList(list));
+                    map.put("count", objects.size());
+                    result.success(map);
+                    break;
+                }
+                case "getRecordingIdsForSchedule": {
+                    String scheduleId = (String)arguments.get("scheduleId");
+                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").equalTo("scheduleId", scheduleId).findAll();
+                    ArrayList list = new ArrayList<>();
+                    for (DynamicRealmObject object : objects) {
+                        HashMap map = new HashMap();
+                        list.add(object.get("uuid"));
+                    }
+                    HashMap map = new HashMap();
+                    map.put("results", Collections.unmodifiableList(list));
+                    map.put("count", objects.size());
+                    result.success(map);
+                    break;
+                }
+                case "getScheduleIdsWithRecordings": {
+                    List<String> scheduleIds = (List<String>)arguments.get("scheduleIds");
+                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0])).distinct("scheduleId").findAll();
+                    ArrayList list = new ArrayList<>();
+                    for (DynamicRealmObject object : objects) {
+                        list.add(object.get("scheduleId"));
+                    }
+                    HashMap map = new HashMap();
+                    map.put("results", Collections.unmodifiableList(list));
+                    map.put("count", objects.size());
+                    result.success(map);
+                    break;
+                }
+                case "getAllScheduleIds": {
+                    int limit = (Integer) arguments.get("limit");
+                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").distinct("scheduleId").findAll();
+                    int count = objects.size();
+                    if (limit >= 0) {
+                        objects = realm.where("Recording").distinct("scheduleId").limit(limit).findAll();
+                    }
+                    ArrayList list = new ArrayList<>();
+                    for (DynamicRealmObject object : objects) {
+                        list.add(object.get("scheduleId"));
+                    }
+                    HashMap map = new HashMap();
+                    map.put("results", Collections.unmodifiableList(list));
+                    map.put("count", count);
+                    result.success(map);
+                    break;
+                }
                 case "allObjects": {
                     String className = (String) arguments.get("$");
                     RealmResults<DynamicRealmObject> results = realm.where(className).findAll();
                     List list = convert(results);
-                    result.success(list);
+                    HashMap map = new HashMap();
+                    map.put("results", list);
+                    map.put("count", results.size());
+                    result.success(map);
                     break;
                 }
                 case "updateObject": {
@@ -132,9 +249,14 @@ class FlutterRealm {
                 case "subscribeObjects": {
                     String className = (String) arguments.get("$");
                     String subscriptionId = (String) arguments.get("subscriptionId");
+                    int limit = (Integer) arguments.get("limit");
                     List predicate = (List) arguments.get("predicate");
-
-                    RealmResults<DynamicRealmObject> subscription = getQuery(realm.where(className), predicate).findAllAsync();
+                    RealmResults<DynamicRealmObject> subscription;
+                    if (limit >= 0) {
+                        subscription = getQuery(realm.where(className), predicate).limit(limit).findAllAsync();
+                    } else {
+                        subscription = getQuery(realm.where(className), predicate).findAllAsync();
+                    }
                     subscribe(subscriptionId, subscription);
 
                     result.success(null);
@@ -142,12 +264,31 @@ class FlutterRealm {
                 }
                 case "objects": {
                     String className = (String) arguments.get("$");
+                    int limit = (Integer) arguments.get("limit");
                     List predicate = (List) arguments.get("predicate");
-
-
                     RealmResults<DynamicRealmObject> results = getQuery(realm.where(className), predicate).findAll();
+                    int count = results.size();
+                    if (limit >= 0) {
+                        results = getQuery(realm.where(className), predicate).limit(limit).findAll();
+                    }
                     List list = convert(results);
-                    result.success(list);
+                    HashMap map = new HashMap();
+                    map.put("results", list);
+                    map.put("count", count);
+                    result.success(map);
+                    break;
+                }
+                case "object": {
+                    String className = (String) arguments.get("$");
+                    Object primaryKey = arguments.get("primaryKey");
+                    DynamicRealmObject object = find("Recording", primaryKey);
+                    if (object == null) {
+                        String msg = String.format("%s not found with primaryKey = %s", className, primaryKey);
+                        result.error(msg, null, null);
+                        return;
+                    }
+                    HashMap map = objectToMap(object);
+                    result.success(map);
                     break;
                 }
                 case "unsubscribe": {
@@ -301,6 +442,12 @@ class FlutterRealm {
                     }
                 }
                 break;
+                case "in": {
+                    String fieldName = (String) item.get(1);
+                    List<String> argument = (List)item.get(2);
+                    result = result.in(fieldName, argument.toArray(new String[0]));
+                }
+                break;
                 case "and":
                     result = result.and();
                     break;
@@ -328,6 +475,7 @@ class FlutterRealm {
                 map.put("realmId", realmId);
                 map.put("subscriptionId", subscriptionId);
                 map.put("results", list);
+                map.put("count", results.size());
 
                 channel.invokeMethod("onResultsChange", Collections.unmodifiableMap(map));
             }

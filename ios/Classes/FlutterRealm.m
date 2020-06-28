@@ -9,6 +9,7 @@
 
 #import <Realm/Realm.h>
 #import <Realm/RLMRealm_Dynamic.h>
+#import "Recording.h"
 
 @interface FlutterRealm ()
 @property (strong, nonatomic) RLMRealm *realm;
@@ -66,7 +67,9 @@
         if ([arguments[@"inMemoryIdentifier"] isKindOfClass:[NSString class]]){
             config.inMemoryIdentifier = arguments[@"inMemoryIdentifier"];
         }
-        
+        if ([arguments[@"encryptionKey"] isKindOfClass:[NSData class]]){
+            config.encryptionKey = arguments[@"encryptionKey"];
+        }
         _realmId = identifier;
         _channel = channel;
         _tokens = [NSMutableDictionary dictionary];
@@ -94,14 +97,29 @@
             [self.realm commitWriteTransaction];
             
             result([object toMap]);
-        } else if ([@"allObjects" isEqualToString:method]) {
+        }   else if ([@"object" isEqualToString:method]) {
+            NSString *classname = arguments[@"$"];
+            id primaryKey = arguments[@"primaryKey"];
+            
+            if (classname == nil || primaryKey == nil){
+                result([self invalidParametersFor:call]);
+                return;
+            }
+            RLMObject *object = [self.realm objectWithClassName:classname forPrimaryKey:primaryKey];
+            if (object == nil) {
+                result([self notFoundFor:call]);
+                return;
+            }
+            
+            result([object toMap]);
+        }    else if ([@"allObjects" isEqualToString:method]) {
             NSString *classname = arguments[@"$"];
             if (classname == nil){
                 result([self invalidParametersFor:call]);
                 return;
             }
             RLMResults *allObjects = [self.realm allObjects:classname];
-            NSArray *items = [self convert:allObjects];
+            NSArray *items = [self convert:allObjects limit:nil];
             result(items);
         }  else if ([@"updateObject" isEqualToString:method]) {
             NSString *classname = arguments[@"$"];
@@ -144,7 +162,139 @@
             }];
             
             result(nil);
-        } else if ([@"subscribeAllObjects" isEqualToString:method]) {
+        }   else if ([@"deleteRecording" isEqualToString:method]) {
+            id primaryKey = arguments[@"primaryKey"];
+            NSString* scheduleId = arguments[@"scheduleId"];
+            
+            if (primaryKey == nil){
+                result([self invalidParametersFor:call]);
+                return;
+            }
+            Recording *recording = [Recording objectForPrimaryKey:primaryKey];
+            if (recording == nil) {
+                result([self notFoundFor:call]);
+                return;
+            }
+            
+            NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId = %@",
+                                 scheduleId];
+            [self.realm transactionWithBlock:^{
+                NSString *path = recording.path;
+                NSError *error;
+                [self.realm deleteObject:recording];
+                NSLog(@"Start delete file at path: %@", path);
+                [[NSFileManager defaultManager] removeItemAtPath:path error:&error];
+                if (error) {
+                    NSLog(@"Error removing file at path: %@", path);
+                }
+            }];
+            RLMResults<Recording *> *recordingsForSchedule = [Recording objectsWithPredicate:pred];
+            
+            result([NSNumber numberWithLong:recordingsForSchedule.count]);
+        }   else if ([@"deleteAllRecordings" isEqualToString:method]) {
+            NSArray<NSString*>* ids = arguments[@"primaryKeys"];
+            NSString* scheduleId = arguments[@"scheduleId"];
+            
+            if (ids == nil){
+                result([self invalidParametersFor:call]);
+                return;
+            }
+            NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId = %@",
+                                 scheduleId];
+             RLMResults<Recording *> *recordingsForSchedule = [Recording objectsWithPredicate:pred];
+            [self.realm transactionWithBlock:^{
+                NSMutableArray<NSString*> *items = [NSMutableArray array];
+                for (Recording *item in recordingsForSchedule) {
+                    [items addObject:item.path];
+                }
+                [self.realm deleteObjects:recordingsForSchedule];
+                for (NSString *item in items) {
+                    NSError *error;
+                    NSLog(@"Start delete file at path: %@", item);
+                    [[NSFileManager defaultManager] removeItemAtPath:item error:&error];
+                    if (error) {
+                        NSLog(@"Error removing file at path: %@", item);
+                    }
+                }
+            }];
+            result([NSNumber numberWithLong:recordingsForSchedule.count]);
+        }   else if ([@"getRecordingIdsForScheduleIds" isEqualToString:method]) {
+            NSArray<NSString*>* scheduleIds = arguments[@"scheduleIds"];
+            
+            if (scheduleIds == nil){
+                result([self invalidParametersFor:call]);
+                return;
+            }
+            NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId IN %@",
+                                 scheduleIds];
+            RLMResults<Recording *> *results = [Recording objectsWithPredicate:pred];
+            NSMutableArray *items = [NSMutableArray array];
+            for (Recording *item in results) {
+                [items addObject:@{
+                    @"uuid": item.uuid,
+                    @"scheduleId": item.scheduleId,
+                }];
+            }
+            result(@{
+              @"results":items,
+              @"count": @(results.count)
+            });
+        }   else if ([@"getRecordingIdsForSchedule" isEqualToString:method]) {
+                 NSString* scheduleId = arguments[@"scheduleId"];
+                 
+                 if (scheduleId == nil){
+                     result([self invalidParametersFor:call]);
+                     return;
+                 }
+                 NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId == %@",
+                                      scheduleId];
+                 RLMResults<Recording *> *results = [Recording objectsWithPredicate:pred];
+                 NSMutableArray *items = [NSMutableArray array];
+                 for (Recording *item in results) {
+                     [items addObject:item.uuid];
+                 }
+                 result(items);
+             }
+        else if ([@"getScheduleIdsWithRecordings" isEqualToString:method]) {
+            NSArray<NSString*>* scheduleIds = arguments[@"scheduleIds"];
+            
+            if (scheduleIds == nil){
+                result([self invalidParametersFor:call]);
+                return;
+            }
+            NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId IN %@",
+                                 scheduleIds];
+            RLMResults<Recording *> *results = [Recording objectsWithPredicate:pred];
+            results = [results distinctResultsUsingKeyPaths:@[@"scheduleId"]];
+            NSMutableArray *items = [NSMutableArray array];
+            for (Recording *item in results) {
+                [items addObject:item.scheduleId];
+            }
+            result(@{
+              @"results":items,
+              @"count": @(results.count)
+            });
+        }   else if ([@"getAllScheduleIds" isEqualToString:method]) {
+            NSNumber *limit = arguments[@"limit"];
+            RLMResults<Recording *> *results = [Recording allObjects];
+            results = [results distinctResultsUsingKeyPaths:@[@"scheduleId"]];
+            NSMutableArray *items = [NSMutableArray array];
+            if (limit >= 0) {
+                uint64_t realLimit = MIN([limit longValue], results.count);
+                for (int i = 0; i < realLimit; ++i) {
+                    [items addObject:results[i].scheduleId];
+                }
+            } else {
+                for (Recording *item in results) {
+                    [items addObject:item.scheduleId];
+                }
+            }
+            result(@{
+                  @"results":items,
+                  @"count": @(results.count)
+                });
+        }
+        else if ([@"subscribeAllObjects" isEqualToString:method]) {
             NSString *classname = arguments[@"$"];
             NSString *subscriptionId = arguments[@"subscriptionId"];
             
@@ -156,28 +306,39 @@
             
             id subscribeResult = [self subscribe:allObjects
                                   subscriptionId:subscriptionId
-                                            call:call];
+                                            call:call limit:nil];
             result(subscribeResult);
         } else if ([@"objects"  isEqualToString:method]) {
             
             NSString *classname = arguments[@"$"];
             NSArray *predicate = arguments[@"predicate"];
+            NSNumber *limit = arguments[@"limit"];
             
             if (classname == nil || predicate == nil ){
                 result([self invalidParametersFor:call]);
                 return;
             }
-            RLMResults *results = [self.realm objects:classname withPredicate:[self generatePredicate:predicate]];
-            
             NSMutableArray *items = [NSMutableArray array];
-            for (RLMObject *item in results) {
-                [items addObject:[item toMap]];
+            RLMResults *results = [self.realm objects:classname withPredicate:[self generatePredicate:predicate]];
+            if (limit >= 0) {
+                uint64_t realLimit = MIN([limit longValue], results.count);
+                for (int i = 0; i < realLimit; ++i) {
+                    [items addObject:[results[i] toMap]];
+                }
+            } else {
+                for (RLMObject *item in results) {
+                    [items addObject:[item toMap]];
+                }
             }
-            result(items);
+            result(@{
+              @"results":items,
+              @"count": @(results.count)
+            });
         }  else if ([@"subscribeObjects"  isEqualToString:method]) {
             NSString *classname = arguments[@"$"];
             NSString *subscriptionId = arguments[@"subscriptionId"];
             NSArray *predicate = arguments[@"predicate"];
+            NSNumber *limit = arguments[@"limit"];
             
             if (classname == nil || predicate == nil || subscriptionId == nil){
                 result([self invalidParametersFor:call]);
@@ -187,7 +348,7 @@
             RLMResults *results = [self.realm objects:classname withPredicate:[self generatePredicate:predicate]];
             id subscribeResult = [self subscribe:results
                                   subscriptionId:subscriptionId
-                                            call:call];
+                                            call:call limit:limit >= 0 ? limit : nil];
             result(subscribeResult);
         } else if ([@"unsubscribe" isEqualToString:method]) {
             NSString *subscriptionId = arguments[@"subscriptionId"];
@@ -238,10 +399,17 @@
 }
 
 
-- (NSArray *)convert:(RLMResults *)results {
+- (NSArray *)convert:(RLMResults *)results limit:(NSNumber*)limit{
     NSMutableArray *items = [NSMutableArray array];
-    for (RLMObject *item in results) {
-        [items addObject:[item toMap]];
+    if (limit) {
+        uint64_t realLimit = MIN([limit longValue], results.count);
+        for (int i = 0; i < realLimit; ++i) {
+            [items addObject:[results[i] toMap]];
+        }
+    } else {
+        for (RLMObject *item in results) {
+            [items addObject:[item toMap]];
+        }
     }
     return items;
 }
@@ -250,9 +418,9 @@
     return  [FlutterError errorWithCode:@"1"
                                 message:@"Invalid parameter's type"
                                 details:@{
-                                          @"method":call.method,
-                                          @"arguments":call.arguments
-                                          }
+                                    @"method":call.method,
+                                    @"arguments":call.arguments
+                                }
              ];
     
 }
@@ -260,9 +428,9 @@
     return  [FlutterError errorWithCode:@"2"
                                 message:@"Already subscribed"
                                 details:@{
-                                          @"method":call.method,
-                                          @"arguments":call.arguments
-                                          }
+                                    @"method":call.method,
+                                    @"arguments":call.arguments
+                                }
              ];
     
 }
@@ -271,9 +439,9 @@
     return  [FlutterError errorWithCode:@"3"
                                 message:@"Not subscribed"
                                 details:@{
-                                          @"method":call.method,
-                                          @"arguments":call.arguments
-                                          }
+                                    @"method":call.method,
+                                    @"arguments":call.arguments
+                                }
              ];
     
 }
@@ -282,24 +450,36 @@
     return  [FlutterError errorWithCode:@"4"
                                 message:@"Object not found"
                                 details:@{
-                                          @"method":call.method,
-                                          @"arguments":call.arguments
-                                          }
+                                    @"method":call.method,
+                                    @"arguments":call.arguments
+                                }
              ];
     
 }
 
-- (id)subscribe:(RLMResults *)results subscriptionId:(NSString *) subscriptionId call:(FlutterMethodCall *)call{
+- (FlutterError *)deletErrorFor:(FlutterMethodCall *)call error:(NSError*) error{
+    return  [FlutterError errorWithCode:@"5"
+                                message:error.localizedDescription
+                                details:@{
+                                    @"method":call.method,
+                                    @"arguments":call.arguments
+                                }
+             ];
+    
+}
+
+- (id)subscribe:(RLMResults *)results subscriptionId:(NSString *) subscriptionId call:(FlutterMethodCall *)call limit:(NSNumber *)limit{
     if (self.tokens[subscriptionId] != nil){
         return [self alreadySubcribed:call];
     }
     
     RLMNotificationToken *token = [results addNotificationBlock:^(RLMResults * _Nullable results, RLMCollectionChange * _Nullable change, NSError * _Nullable error) {
         [self.channel invokeMethod:@"onResultsChange" arguments:@{
-                                                                  @"realmId": self.realmId, 
-                                                                  @"subscriptionId": subscriptionId,
-                                                                  @"results" : [self convert:results]
-                                                                  }];
+            @"realmId": self.realmId,
+            @"subscriptionId": subscriptionId,
+            @"results" : [self convert:results limit:limit],
+            @"count": @(results.count),
+        }];
     }];
     
     self.tokens[subscriptionId] = token;
@@ -311,14 +491,15 @@
     NSMutableString *format = [NSMutableString string];
     
     NSDictionary *codeToOperator = @{
-                                     @"greaterThan":@">",
-                                     @"greaterThanOrEqualTo":@">=",
-                                     @"lessThan":@"<",
-                                     @"lessThanOrEqualTo":@"<=",
-                                     @"equalTo":@"==",
-                                     @"notEqualTo":@"!=",
-                                     @"contains":@"CONTAINS"
-                                     };
+        @"greaterThan":@">",
+        @"greaterThanOrEqualTo":@">=",
+        @"lessThan":@"<",
+        @"lessThanOrEqualTo":@"<=",
+        @"equalTo":@"==",
+        @"notEqualTo":@"!=",
+        @"contains":@"CONTAINS",
+        @"in":@"IN"
+    };
     NSMutableArray *arguments = [NSMutableArray array];
     
     for (NSArray *item in items){

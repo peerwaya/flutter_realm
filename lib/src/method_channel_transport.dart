@@ -14,13 +14,11 @@ class MethodChannelTransport {
   Stream<MethodCall> get methodCallStream =>
       _methodCallController.stream.where(_equalRealmId);
 
-  Future<T> invokeMethod<T>(String method, [Map arguments]) =>
+  Future<T> invokeMethod<T>(String method, [Map<String, dynamic> arguments]) =>
       _channel.invokeMethod<T>(method, _addRealmId(arguments));
 
-  Map _addRealmId(Map arguments) {
-    final map = (arguments ?? {});
-    map['realmId'] = realmId;
-    return map;
+  Map _addRealmId(Map<String, dynamic> arguments) {
+    return {...arguments, 'realmId': realmId};
   }
 
   bool _equalRealmId(MethodCall call) => call.arguments['realmId'] == realmId;
