@@ -22,6 +22,7 @@ import io.realm.RealmFieldType;
 import io.realm.RealmList;
 import io.realm.RealmQuery;
 import io.realm.RealmResults;
+import io.realm.Sort;
 
 class FlutterRealm {
     private final String realmId;
@@ -148,7 +149,15 @@ class FlutterRealm {
                 }
                 case "getRecordingIdsForScheduleIds": {
                     List<String> scheduleIds = (List<String>)arguments.get("scheduleIds");
-                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0])).findAll();
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
+                    RealmQuery query = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0]));
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            query = query.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
+                    }
+                    RealmResults<DynamicRealmObject> objects = query.findAll();
                     ArrayList list = new ArrayList<>();
                     for (DynamicRealmObject object : objects) {
                         HashMap map = new HashMap();
@@ -164,10 +173,17 @@ class FlutterRealm {
                 }
                 case "getRecordingIdsForSchedule": {
                     String scheduleId = (String)arguments.get("scheduleId");
-                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").equalTo("scheduleId", scheduleId).findAll();
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
+                    RealmQuery query = realm.where("Recording").equalTo("scheduleId", scheduleId);
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            query = query.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
+                    }
+                    RealmResults<DynamicRealmObject> objects = query.findAll();
                     ArrayList list = new ArrayList<>();
                     for (DynamicRealmObject object : objects) {
-                        HashMap map = new HashMap();
                         list.add(object.get("uuid"));
                     }
                     HashMap map = new HashMap();
@@ -178,7 +194,15 @@ class FlutterRealm {
                 }
                 case "getScheduleIdsWithRecordings": {
                     List<String> scheduleIds = (List<String>)arguments.get("scheduleIds");
-                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0])).distinct("scheduleId").findAll();
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
+                    RealmQuery query = realm.where("Recording").in("scheduleId", scheduleIds.toArray(new String[0])).distinct("scheduleId");
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            query = query.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
+                    }
+                    RealmResults<DynamicRealmObject> objects = query.findAll();
                     ArrayList list = new ArrayList<>();
                     for (DynamicRealmObject object : objects) {
                         list.add(object.get("scheduleId"));
@@ -191,11 +215,20 @@ class FlutterRealm {
                 }
                 case "getAllScheduleIds": {
                     int limit = (Integer) arguments.get("limit");
-                    RealmResults<DynamicRealmObject> objects = realm.where("Recording").distinct("scheduleId").findAll();
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
+                    RealmQuery query = realm.where("Recording").distinct("scheduleId");
+                    RealmResults<DynamicRealmObject> objects = query.findAll();
                     int count = objects.size();
-                    if (limit >= 0) {
-                        objects = realm.where("Recording").distinct("scheduleId").limit(limit).findAll();
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            query = query.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
                     }
+                    if (limit >= 0) {
+                        query = query.limit(limit);
+                    }
+                    objects = query.findAll();
                     ArrayList list = new ArrayList<>();
                     for (DynamicRealmObject object : objects) {
                         list.add(object.get("scheduleId"));
@@ -238,9 +271,16 @@ class FlutterRealm {
                 }
                 case "subscribeAllObjects": {
                     String className = (String) arguments.get("$");
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
                     String subscriptionId = (String) arguments.get("subscriptionId");
 
                     RealmResults<DynamicRealmObject> subscription = realm.where(className).findAllAsync();
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            subscription = subscription.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
+                    }
                     subscribe(subscriptionId, subscription);
 
                     result.success(null);
@@ -248,14 +288,17 @@ class FlutterRealm {
                 }
                 case "subscribeObjects": {
                     String className = (String) arguments.get("$");
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
                     String subscriptionId = (String) arguments.get("subscriptionId");
                     int limit = (Integer) arguments.get("limit");
                     List predicate = (List) arguments.get("predicate");
                     RealmResults<DynamicRealmObject> subscription;
-                    if (limit >= 0) {
-                        subscription = getQuery(realm.where(className), predicate).limit(limit).findAllAsync();
-                    } else {
-                        subscription = getQuery(realm.where(className), predicate).findAllAsync();
+                    subscription = getQuery(realm.where(className), predicate, orderBy, ascending, limit).findAllAsync();
+                    if (orderBy != null) {
+                        if (ascending != null) {
+                            subscription = subscription.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+                        }
                     }
                     subscribe(subscriptionId, subscription);
 
@@ -265,12 +308,12 @@ class FlutterRealm {
                 case "objects": {
                     String className = (String) arguments.get("$");
                     int limit = (Integer) arguments.get("limit");
+                    String orderBy = (String) arguments.get("orderBy");
+                    Boolean ascending = (Boolean) arguments.get("ascending");
                     List predicate = (List) arguments.get("predicate");
-                    RealmResults<DynamicRealmObject> results = getQuery(realm.where(className), predicate).findAll();
+                    RealmResults<DynamicRealmObject> results = getQuery(realm.where(className), predicate, null, null, -1).findAll();
                     int count = results.size();
-                    if (limit >= 0) {
-                        results = getQuery(realm.where(className), predicate).limit(limit).findAll();
-                    }
+                    results = getQuery(realm.where(className), predicate, orderBy, ascending, limit).findAll();
                     List list = convert(results);
                     HashMap map = new HashMap();
                     map.put("results", list);
@@ -344,7 +387,7 @@ class FlutterRealm {
         return object;
     }
 
-    private RealmQuery<DynamicRealmObject> getQuery(RealmQuery<DynamicRealmObject> query, List<List> predicate) throws Exception {
+    private RealmQuery<DynamicRealmObject> getQuery(RealmQuery<DynamicRealmObject> query, List<List> predicate, String orderBy, Boolean ascending, int limit) throws Exception {
         if (predicate == null) {
             return query;
         }
@@ -352,7 +395,6 @@ class FlutterRealm {
 
         for (List item : predicate) {
             String operator = (String) item.get(0);
-
             switch (operator) {
                 case "greaterThan": {
                     String fieldName = (String) item.get(1);
@@ -388,7 +430,6 @@ class FlutterRealm {
                         result = result.lessThan(fieldName, (Long) argument);
                     } else {
                         throw new Exception("Unsupported type");
-
                     }
                 }
                 break;
@@ -457,6 +498,12 @@ class FlutterRealm {
                 default:
                     throw new Exception("Unknown operator");
             }
+        }
+        if (orderBy != null && ascending != null) {
+            result = result.sort(orderBy, ascending ? Sort.ASCENDING : Sort.DESCENDING);
+        }
+        if (limit >= 0) {
+            result = result.limit(limit);
         }
         return result;
     }

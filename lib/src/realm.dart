@@ -144,9 +144,15 @@ class Realm {
     return controller.stream;
   }
 
-  Future<QueryResult> objects(Query query, {int limit = -1}) async {
-    final map = await _invokeMethod('objects',
-        {'\$': query.className, 'predicate': query._container, 'limit': limit});
+  Future<QueryResult> objects(Query query,
+      {int limit = -1, String orderBy, bool ascending = true}) async {
+    final map = await _invokeMethod('objects', {
+      '\$': query.className,
+      'predicate': query._container,
+      'limit': limit,
+      'orderBy': orderBy,
+      'ascending': ascending
+    });
     return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 
@@ -209,28 +215,37 @@ class Realm {
         {'primaryKeys': primaryKeys, 'scheduleId': scheduleId});
   }
 
-  Future<QueryResult> getRecordingIdsForScheduleIds(
-      List<String> scheduleIds) async {
-    final map = await _invokeMethod(
-        'getRecordingIdsForScheduleIds', {'scheduleIds': scheduleIds});
+  Future<QueryResult> getRecordingIdsForScheduleIds(List<String> scheduleIds,
+      {String orderBy, bool ascending = true}) async {
+    final map = await _invokeMethod('getRecordingIdsForScheduleIds', {
+      'scheduleIds': scheduleIds,
+      'orderBy': orderBy,
+      'ascending': ascending
+    });
     return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 
-  Future<QueryResult> getRecordingIdsForSchedule(String scheduleId) async {
-    final map = await _invokeMethod(
-        'getRecordingIdsForSchedule', {'scheduleId': scheduleId});
+  Future<QueryResult> getRecordingIdsForSchedule(String scheduleId,
+      {String orderBy, bool ascending = true}) async {
+    final map = await _invokeMethod('getRecordingIdsForSchedule',
+        {'scheduleId': scheduleId, 'orderBy': orderBy, 'ascending': ascending});
     return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 
-  Future<QueryResult> getScheduleIdsWithRecordings(
-      List<String> scheduleIds) async {
-    final map = await _invokeMethod(
-        'getScheduleIdsWithRecordings', {'scheduleIds': scheduleIds});
+  Future<QueryResult> getScheduleIdsWithRecordings(List<String> scheduleIds,
+      {String orderBy, bool ascending = true}) async {
+    final map = await _invokeMethod('getScheduleIdsWithRecordings', {
+      'scheduleIds': scheduleIds,
+      'orderBy': orderBy,
+      'ascending': ascending
+    });
     return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 
-  Future<QueryResult> getAllScheduleIds({int limit = -1}) async {
-    final map = await _invokeMethod('getAllScheduleIds', {'limit': limit});
+  Future<QueryResult> getAllScheduleIds(
+      {int limit = -1, String orderBy, bool ascending = true}) async {
+    final map = await _invokeMethod('getAllScheduleIds',
+        {'limit': limit, 'orderBy': orderBy, 'ascending': ascending});
     return QueryResult.fromMap(_asStringKeyedMap(map));
   }
 

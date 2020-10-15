@@ -220,6 +220,9 @@
             result([NSNumber numberWithLong:recordingsForSchedule.count]);
         }   else if ([@"getRecordingIdsForScheduleIds" isEqualToString:method]) {
             NSArray<NSString*>* scheduleIds = arguments[@"scheduleIds"];
+            NSString *orderBy = arguments[@"orderBy"];
+            NSNumber *ascending = arguments[@"ascending"];
+            BOOL isAscending = [ascending boolValue];
             
             if (scheduleIds == nil){
                 result([self invalidParametersFor:call]);
@@ -228,6 +231,9 @@
             NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId IN %@",
                                  scheduleIds];
             RLMResults<Recording *> *results = [Recording objectsWithPredicate:pred];
+            if (orderBy) {
+                results = [results sortedResultsUsingKeyPath:orderBy ascending:isAscending];
+            }
             NSMutableArray *items = [NSMutableArray array];
             for (Recording *item in results) {
                 [items addObject:@{
@@ -241,6 +247,9 @@
             });
         }   else if ([@"getRecordingIdsForSchedule" isEqualToString:method]) {
                  NSString* scheduleId = arguments[@"scheduleId"];
+                 NSString *orderBy = arguments[@"orderBy"];
+                 NSNumber *ascending = arguments[@"ascending"];
+                 BOOL isAscending = [ascending boolValue];
                  
                  if (scheduleId == nil){
                      result([self invalidParametersFor:call]);
@@ -249,11 +258,17 @@
                  NSPredicate *pred = [NSPredicate predicateWithFormat:@"scheduleId == %@",
                                       scheduleId];
                  RLMResults<Recording *> *results = [Recording objectsWithPredicate:pred];
+                if (orderBy) {
+                    results = [results sortedResultsUsingKeyPath:orderBy ascending:isAscending];
+                }
                  NSMutableArray *items = [NSMutableArray array];
                  for (Recording *item in results) {
                      [items addObject:item.uuid];
                  }
-                 result(items);
+                 result(@{
+                   @"results":items,
+                   @"count": @(results.count)
+                 });
              }
         else if ([@"getScheduleIdsWithRecordings" isEqualToString:method]) {
             NSArray<NSString*>* scheduleIds = arguments[@"scheduleIds"];
@@ -276,8 +291,14 @@
             });
         }   else if ([@"getAllScheduleIds" isEqualToString:method]) {
             NSNumber *limit = arguments[@"limit"];
+            NSString *orderBy = arguments[@"orderBy"];
+            NSNumber *ascending = arguments[@"ascending"];
+            BOOL isAscending = [ascending boolValue];
             RLMResults<Recording *> *results = [Recording allObjects];
             results = [results distinctResultsUsingKeyPaths:@[@"scheduleId"]];
+            if (orderBy) {
+                results = [results sortedResultsUsingKeyPath:orderBy ascending:isAscending];
+            }
             NSMutableArray *items = [NSMutableArray array];
             if (limit >= 0) {
                 uint64_t realLimit = MIN([limit longValue], results.count);
@@ -313,6 +334,9 @@
             NSString *classname = arguments[@"$"];
             NSArray *predicate = arguments[@"predicate"];
             NSNumber *limit = arguments[@"limit"];
+            NSString *orderBy = arguments[@"orderBy"];
+            NSNumber *ascending = arguments[@"ascending"];
+            BOOL isAscending = [ascending boolValue];
             
             if (classname == nil || predicate == nil ){
                 result([self invalidParametersFor:call]);
@@ -320,6 +344,9 @@
             }
             NSMutableArray *items = [NSMutableArray array];
             RLMResults *results = [self.realm objects:classname withPredicate:[self generatePredicate:predicate]];
+            if (orderBy) {
+                results = [results sortedResultsUsingKeyPath:orderBy ascending:isAscending];
+            }
             if (limit >= 0) {
                 uint64_t realLimit = MIN([limit longValue], results.count);
                 for (int i = 0; i < realLimit; ++i) {
@@ -339,6 +366,10 @@
             NSString *subscriptionId = arguments[@"subscriptionId"];
             NSArray *predicate = arguments[@"predicate"];
             NSNumber *limit = arguments[@"limit"];
+            NSString *orderBy = arguments[@"orderBy"];
+            NSNumber *ascending = arguments[@"ascending"];
+            BOOL isAscending = [ascending boolValue];
+            
             
             if (classname == nil || predicate == nil || subscriptionId == nil){
                 result([self invalidParametersFor:call]);
@@ -346,6 +377,9 @@
             }
             
             RLMResults *results = [self.realm objects:classname withPredicate:[self generatePredicate:predicate]];
+            if (orderBy) {
+                results = [results sortedResultsUsingKeyPath:orderBy ascending:isAscending];
+            }
             id subscribeResult = [self subscribe:results
                                   subscriptionId:subscriptionId
                                             call:call limit:limit >= 0 ? limit : nil];
