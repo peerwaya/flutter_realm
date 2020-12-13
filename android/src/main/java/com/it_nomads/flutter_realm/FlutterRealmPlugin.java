@@ -11,15 +11,11 @@ import io.flutter.plugin.common.MethodChannel.MethodCallHandler;
 import io.flutter.plugin.common.MethodChannel.Result;
 import io.flutter.plugin.common.PluginRegistry.Registrar;
 import io.realm.Realm;
-import io.realm.SyncConfiguration;
-import io.realm.SyncUser;
 
 public class FlutterRealmPlugin implements MethodCallHandler {
 
     private FlutterRealmPlugin(MethodChannel channel) {
         this.channel = channel;
-        handlers = new ArrayList<>();
-        handlers.add(new SyncUserMethodSubHandler());
     }
 
     public static void registerWith(Registrar registrar) {
@@ -33,19 +29,12 @@ public class FlutterRealmPlugin implements MethodCallHandler {
 
     private HashMap<String, FlutterRealm> realms = new HashMap<>();
     private final MethodChannel channel;
-    private List<MethodSubHandler> handlers;
 
     @Override
     public void onMethodCall(MethodCall call, Result result) {
 
         try {
             Map arguments = (Map) call.arguments;
-
-            for (MethodSubHandler handler : handlers) {
-                if (handler.onMethodCall(call, result)) {
-                    return;
-                }
-            }
 
             switch (call.method) {
                 case "initialize": {
@@ -54,12 +43,6 @@ public class FlutterRealmPlugin implements MethodCallHandler {
                 }
                 case "reset":
                     onReset(result);
-                    break;
-                case "asyncOpenWithConfiguration":
-                    onAsyncOpenWithConfiguration(arguments, result);
-                    break;
-                case "syncOpenWithConfiguration":
-                    onSyncOpenWithConfiguration(arguments, result);
                     break;
                 default: {
                     String realmId = (String) arguments.get("realmId");
@@ -95,50 +78,7 @@ public class FlutterRealmPlugin implements MethodCallHandler {
         result.success(null);
     }
 
-    private void onAsyncOpenWithConfiguration(Map arguments, final Result result) {
-        final String realmId = (String) arguments.get("realmId");
-        final SyncConfiguration configuration = getSyncConfiguration(arguments);
 
-        Realm.getInstanceAsync(configuration, new Realm.Callback() {
-            @Override
-            public void onSuccess(Realm realm) {
-                FlutterRealm flutterRealm = new FlutterRealm(channel, realmId, realm);
-                realms.put(realmId, flutterRealm);
-                result.success(null);
-            }
-
-            @Override
-            public void onError(Throwable exception) {
-                result.error(exception.getLocalizedMessage(), exception.getMessage(), exception);
-            }
-
-        });
-
-    }
-
-    private void onSyncOpenWithConfiguration(Map arguments, Result result) {
-        String realmId = (String) arguments.get("realmId");
-        SyncConfiguration configuration = getSyncConfiguration(arguments);
-
-        FlutterRealm flutterRealm = new FlutterRealm(channel, realmId, configuration);
-        realms.put(realmId, flutterRealm);
-        result.success(null);
-    }
-
-    private SyncConfiguration getSyncConfiguration(Map arguments) {
-        String syncServerURL = (String) arguments.get("syncServerURL");
-        boolean fullSynchronization = (boolean) arguments.get("fullSynchronization");
-
-        assert syncServerURL != null;
-
-        SyncConfiguration.Builder builder = SyncUser.current().createConfiguration(syncServerURL);
-        if (fullSynchronization) {
-            builder.fullSynchronization();
-        }
-
-
-        return builder.build();
-    }
 
 
 }

@@ -23,7 +23,6 @@ if (flutterVersionName == null) {
 
 apply plugin: 'com.android.application'
 apply from: "$flutterRoot/packages/flutter_tools/gradle/flutter.gradle"
-apply plugin: 'realm-android'
 
 android {
     compileSdkVersion 28
@@ -57,10 +56,6 @@ android {
 
 flutter {
     source '../..'
-}
-
-realm {
-    syncEnabled = true
 }
 
 dependencies {

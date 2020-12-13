@@ -2,15 +2,10 @@ buildscript {
     repositories {
         google()
         jcenter()
-
-        maven {
-            url 'https://maven.fabric.io/public'
-        }
     }
 
     dependencies {
         classpath 'com.android.tools.build:gradle:3.4.2'
-        classpath "io.realm:realm-gradle-plugin:5.13.0"
     }
 }
 

@@ -5,14 +5,11 @@ buildscript {
     repositories {
         google()
         jcenter()
-        maven {
-            url 'http://oss.jfrog.org/artifactory/oss-snapshot-local'
-        }
     }
 
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.4.2'
-        classpath "io.realm:realm-gradle-plugin:7.0.0-beta-SNAPSHOT"
+        classpath 'com.android.tools.build:gradle:3.6.4'
+        classpath "io.realm:realm-gradle-plugin:10.2.0"
     }
 }
 
@@ -20,9 +17,6 @@ rootProject.allprojects {
     repositories {
         google()
         jcenter()
-        maven {
-            url 'http://oss.jfrog.org/artifactory/oss-snapshot-local'
-        }
     }
 }
 
@@ -30,7 +24,7 @@ apply plugin: 'com.android.library'
 apply plugin: 'realm-android'
 
 realm {
-    syncEnabled = true
+    syncEnabled = false
 }
 
 android {

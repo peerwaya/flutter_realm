@@ -24,8 +24,8 @@ class _SubscriptionWidgetState extends State<SubscriptionWidget> {
     super.initState();
     realm = widget.realm;
 
-    products =
-        realm.subscribeAllObjects('Product').map<List<Product>>(_mapProduct);
+    // products =
+    //     realm.subscribeAllObjects('Product').map<List<Product>>(_mapProduct);
   }
 
   @override
@@ -63,12 +63,12 @@ class _SubscriptionWidgetState extends State<SubscriptionWidget> {
   void _onSearch(String term) {
     Stream<List<Map>> newProducts;
 
-    if (term == null || term.isEmpty) {
-      newProducts = realm.subscribeAllObjects('Product');
-    } else {
-      final query = Query('Product').contains('title', term);
-      newProducts = realm.subscribeObjects(query);
-    }
+    // if (term == null || term.isEmpty) {
+    //   newProducts = realm.subscribeAllObjects('Product');
+    // } else {
+    //   final query = Query('Product').contains('title', term);
+    //   newProducts = realm.subscribeObjects(query);
+    // }
 
     setState(() => products = newProducts.map<List<Product>>(_mapProduct));
   }
