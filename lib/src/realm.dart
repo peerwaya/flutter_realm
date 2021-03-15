@@ -78,8 +78,8 @@ class Realm {
         }
         // ignore: close_sinks
         final controller = _subscriptions[subscriptionId];
-        controller.value =
-            QueryResult.fromMap(_asStringKeyedMap(call.arguments));
+        controller.add(QueryResult.fromMap(_asStringKeyedMap(call.arguments)));
+
         break;
       default:
         throw ('Unknown method: $call');
